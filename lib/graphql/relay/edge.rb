@@ -14,6 +14,11 @@ module GraphQL
         @cursor ||= @connection.cursor_from_node(node)
       end
 
+      def self.between(child_node, parent_node)
+        parent_connection = GraphQL::Relay::RelationConnection.new(parent_node, {})
+        self.new(child_node, parent_connection)
+      end
+
       def self.create_type(wrapped_type)
         GraphQL::ObjectType.define do
           name("#{wrapped_type.name}Edge")
