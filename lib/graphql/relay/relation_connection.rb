@@ -1,6 +1,8 @@
 module GraphQL
   module Relay
     class RelationConnection < BaseConnection
+      DEFAULT_ORDER = "id"
+
       def cursor_from_node(item)
         order_value = item.public_send(order_name)
         cursor_parts = [order, order_value]
@@ -8,9 +10,8 @@ module GraphQL
       end
 
       def order
-        @order ||= (super || "id")
+        @order ||= (super || DEFAULT_ORDER)
       end
-
 
       private
 
@@ -19,7 +20,7 @@ module GraphQL
         @paged_nodes = begin
           items = sliced_nodes
           first && items = items.first(first)
-          last && items.length > last && items.last(last)
+          last && items.count > last && items = items.last(last)
           items
         end
       end
@@ -30,20 +31,20 @@ module GraphQL
           items = object
 
           if order
-            items = items.order(order_name => order_direction)
+            items = items.order(items.table[order_name].public_send(order_direction))
           end
 
           if after
             _o, order_value = slice_from_cursor(after)
             direction_marker = order_direction == :asc ? ">" : "<"
-            where_condition = create_order_condition(order_name, order_value, direction_marker)
+            where_condition = create_order_condition(table_name, order_name, order_value, direction_marker)
             items = items.where(where_condition)
           end
 
           if before
             _o, order_value = slice_from_cursor(before)
             direction_marker = order_direction == :asc ? "<" : ">"
-            where_condition = create_order_condition(order_name, order_value, direction_marker)
+            where_condition = create_order_condition(table_name, order_name, order_value, direction_marker)
             items = items.where(where_condition)
           end
 
@@ -66,11 +67,18 @@ module GraphQL
         @order_direction ||= order.start_with?("-") ? :desc : :asc
       end
 
-      def create_order_condition(column, value, direction_marker)
+      def table_name
+        @table_name ||= object.table.table_name
+      end
+
+      def create_order_condition(table, column, value, direction_marker)
+        table_name = ActiveRecord::Base.connection.quote_table_name(table)
         name = ActiveRecord::Base.connection.quote_column_name(column)
-        ["#{name} #{direction_marker} ?", value]
+        ["#{table_name}.#{name} #{direction_marker} ?", value]
       end
     end
+
+
     if defined?(ActiveRecord)
       BaseConnection.register_connection_implementation(ActiveRecord::Relation, RelationConnection)
     end

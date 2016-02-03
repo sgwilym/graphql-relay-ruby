@@ -6,10 +6,6 @@ describe GraphQL::Relay::RelationConnection do
     names = ships.map { |e| e["node"]["name"] }
   end
 
-  def get_page_info(result)
-    result["data"]["empire"]["bases"]["pageInfo"]
-  end
-
   def get_last_cursor(result)
     result["data"]["empire"]["bases"]["edges"].last["cursor"]
   end
@@ -20,9 +16,6 @@ describe GraphQL::Relay::RelationConnection do
         empire {
           bases(first: $first, after: $after, last: $last, before: $before, order: $order, nameIncludes: $nameIncludes) {
             ... basesConnection
-            pageInfo {
-              hasNextPage
-            }
           }
         }
       }
@@ -46,14 +39,6 @@ describe GraphQL::Relay::RelationConnection do
       assert_equal(3, get_names(result).length)
     end
 
-    it 'provides pageInfo' do
-      result = query(query_string, "first" => 2)
-      assert_equal(true, get_page_info(result)["hasNextPage"])
-
-      result = query(query_string, "first" => 100)
-      assert_equal(false, get_page_info(result)["hasNextPage"])
-    end
-
     it 'provides custom fileds on the connection type' do
       result = query(query_string, "first" => 2)
       assert_equal(
@@ -72,19 +57,12 @@ describe GraphQL::Relay::RelationConnection do
       result = query(query_string, "after" => last_cursor, "first" => 2)
       assert_equal(["Headquarters"], get_names(result))
 
-      result = query(query_string, "before" => last_cursor, "last" => 2)
-      assert_equal(["Death Star"], get_names(result))
-    end
-
-    it 'paginates with order' do
-      result = query(query_string, "first" => 2, "order" => "name")
-      assert_equal(["Death Star", "Headquarters"], get_names(result))
-
-      # After the last result, find the next 2:
       last_cursor = get_last_cursor(result)
-
-      result = query(query_string, "after" => last_cursor, "first" => 2, "order" => "name")
+      result = query(query_string, "before" => last_cursor, "last" => 1)
       assert_equal(["Shield Generator"], get_names(result))
+
+      result = query(query_string, "before" => last_cursor, "last" => 2)
+      assert_equal(["Death Star", "Shield Generator"], get_names(result))
     end
 
     it 'paginates with reverse order' do
@@ -97,7 +75,7 @@ describe GraphQL::Relay::RelationConnection do
       assert_equal(["Death Star", "Headquarters"], get_names(result))
 
       # After the last result, find the next 2:
-      last_cursor = result["data"]["empire"]["bases"]["edges"].last["cursor"]
+      last_cursor = get_last_cursor(result)
 
       result = query(query_string, "after" => last_cursor, "first" => 2, "order" => "name")
       assert_equal(["Shield Generator"], get_names(result))
@@ -122,7 +100,7 @@ describe GraphQL::Relay::RelationConnection do
     let(:query_string) {%|
       {
         empire {
-          noArgsBases {
+          basesClone {
             edges {
               node {
                 name
@@ -133,8 +111,41 @@ describe GraphQL::Relay::RelationConnection do
     }|}
     it "uses default resolve" do
       result = query(query_string)
-      bases = result["data"]["empire"]["noArgsBases"]["edges"]
+      bases = result["data"]["empire"]["basesClone"]["edges"]
       assert_equal(3, bases.length)
+    end
+  end
+
+  describe "overriding default order" do
+    let(:query_string) {%|
+      query getBases {
+        empire {
+          basesByName { ... basesFields }
+          bases { ... basesFields }
+        }
+      }
+      fragment basesFields on BaseConnection {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+    |}
+
+    def get_names(result, field_name)
+      bases = result["data"]["empire"][field_name]["edges"]
+      base_names = bases.map { |b| b["node"]["name"] }
+    end
+
+    it "applies the default value" do
+      result = query(query_string)
+
+      bases_by_id   = ["Death Star", "Shield Generator", "Headquarters"]
+      bases_by_name = ["Death Star", "Headquarters", "Shield Generator"]
+
+      assert_equal(bases_by_id, get_names(result, "bases"))
+      assert_equal(bases_by_name, get_names(result, "basesByName"))
     end
   end
 end

@@ -2,8 +2,8 @@ module GraphQL
   module Relay
     # Subclasses must implement:
     #   - {#cursor_from_node}, which returns an opaque cursor for the given item
-    #   - {#sliced_edges}, which slices by `before` & `after`
-    #   - {#paged_edges}, which applies `first` & `last` limits
+    #   - {#sliced_nodes}, which slices by `before` & `after`
+    #   - {#paged_nodes}, which applies `first` & `last` limits
     #
     # In a subclass, you have access to
     #   - {#object}, the object which the connection will wrap
@@ -31,10 +31,19 @@ module GraphQL
         connection_type
       end
 
-      # @return [subclass of BaseConnection] a connection wrapping `items`
+      # Find a connection implementation suitable for exposing `items`
+      #
+      # @param [Object] A collection of items (eg, Array, AR::Relation)
+      # @return [subclass of BaseConnection] a connection Class for wrapping `items`
       def self.connection_for_items(items)
-        implementation = CONNECTION_IMPLEMENTATIONS.find do |items_class, connection_class|
-          items.is_a?(items_class)
+        # We check class membership by comparing class names rather than
+        # identity to prevent this from being broken by Rails autoloading.
+        # Changes to the source file for ItemsClass in Rails apps cause it to be
+        # reloaded as a new object, so if we were to use `is_a?` here, it would
+        # no longer match any registered custom connection types.
+        ancestor_names = items.class.ancestors.map(&:name)
+        implementation = CONNECTION_IMPLEMENTATIONS.find do |items_class_name, connection_class|
+          ancestor_names.include? items_class_name
         end
         if implementation.nil?
           raise("No connection implementation to wrap #{items.class} (#{items})")
@@ -45,8 +54,10 @@ module GraphQL
 
       # Add `connection_class` as the connection wrapper for `items_class`
       # eg, `RelationConnection` is the implementation for `AR::Relation`
+      # @param [Class] A class representing a collection (eg, Array, AR::Relation)
+      # @param [Class] A class implementing Connection methods
       def self.register_connection_implementation(items_class, connection_class)
-        CONNECTION_IMPLEMENTATIONS[items_class] = connection_class
+        CONNECTION_IMPLEMENTATIONS[items_class.name] = connection_class
       end
 
       attr_reader :object, :arguments
@@ -59,6 +70,16 @@ module GraphQL
       # Provide easy access to provided arguments:
       METHODS_FROM_ARGUMENTS = [:first, :after, :last, :before, :order]
 
+      # @!method first
+      #   The value passed as `first:`, if there was one
+      # @!method after
+      #   The value passed as `after:`, if there was one
+      # @!method last
+      #   The value passed as `last:`, if there was one
+      # @!method before
+      #   The value passed as `before:`, if there was one
+      # @!method order
+      #   The value passed as `order:`, if there was one
       METHODS_FROM_ARGUMENTS.each do |arg_name|
         define_method(arg_name) do
           arguments[arg_name]
@@ -77,12 +98,12 @@ module GraphQL
 
       # Used by `pageInfo`
       def has_next_page
-        first && sliced_nodes.count > first
+        !!(first && sliced_nodes.count > first)
       end
 
       # Used by `pageInfo`
       def has_previous_page
-        last && sliced_nodes.count > last
+        !!(last && sliced_nodes.count > last)
       end
 
       # An opaque operation which returns a connection-specific cursor.
@@ -93,11 +114,11 @@ module GraphQL
       private
 
       def paged_nodes
-        raise NotImplementedError, "must items for this connection after paging"
+        raise NotImplementedError, "must return items for this connection after paging"
       end
 
       def sliced_nodes
-        raise NotImplementedError, "must all items for this connection after chopping off first and last"
+        raise NotImplementedError, "must return  all items for this connection after chopping off first and last"
       end
     end
   end
