@@ -12,9 +12,9 @@ describe GraphQL::Relay::RelationConnection do
 
   describe "results" do
     let(:query_string) {%|
-      query getShips($first: Int, $after: String, $last: Int, $before: String, $order: String, $nameIncludes: String){
+      query getShips($first: Int, $after: String, $last: Int, $before: String, $nameIncludes: String){
         empire {
-          bases(first: $first, after: $after, last: $last, before: $before, order: $order, nameIncludes: $nameIncludes) {
+          bases(first: $first, after: $after, last: $last, before: $before, nameIncludes: $nameIncludes) {
             ... basesConnection
           }
         }
@@ -63,22 +63,6 @@ describe GraphQL::Relay::RelationConnection do
 
       result = query(query_string, "before" => last_cursor, "last" => 2)
       assert_equal(["Death Star", "Shield Generator"], get_names(result))
-    end
-
-    it 'paginates with reverse order' do
-      result = query(query_string, "first" => 2, "order" => "-name")
-      assert_equal(["Shield Generator", "Headquarters"], get_names(result))
-    end
-
-    it 'paginates with order' do
-      result = query(query_string, "first" => 2, "order" => "name")
-      assert_equal(["Death Star", "Headquarters"], get_names(result))
-
-      # After the last result, find the next 2:
-      last_cursor = get_last_cursor(result)
-
-      result = query(query_string, "after" => last_cursor, "first" => 2, "order" => "name")
-      assert_equal(["Shield Generator"], get_names(result))
     end
 
     it "applies custom arguments" do
@@ -153,37 +137,5 @@ describe GraphQL::Relay::RelationConnection do
       assert_equal(3, bases.length)
     end
   end
-
-  describe "overriding default order" do
-    let(:query_string) {%|
-      query getBases {
-        empire {
-          basesByName { ... basesFields }
-          bases { ... basesFields }
-        }
-      }
-      fragment basesFields on BaseConnection {
-        edges {
-          node {
-            name
-          }
-        }
-      }
-    |}
-
-    def get_names(result, field_name)
-      bases = result["data"]["empire"][field_name]["edges"]
-      base_names = bases.map { |b| b["node"]["name"] }
-    end
-
-    it "applies the default value" do
-      result = query(query_string)
-
-      bases_by_id   = ["Death Star", "Shield Generator", "Headquarters"]
-      bases_by_name = ["Death Star", "Headquarters", "Shield Generator"]
-
-      assert_equal(bases_by_id, get_names(result, "bases"))
-      assert_equal(bases_by_name, get_names(result, "basesByName"))
-    end
-  end
+  
 end
