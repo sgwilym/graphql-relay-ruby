@@ -105,7 +105,7 @@ module GraphQL
       def create_order_conditions(item_values, argument)
         where_conditions = item_values.map { |order_name, item_value|
           direction_marker = create_direction_marker(order_name, argument)
-          condition = create_order_condition(table_name, order_name, item_value, direction_marker)
+          condition = create_order_condition(table_name, order_name.to_s, item_value, direction_marker)
           condition
         }
         query = where_conditions.map { |condition|
