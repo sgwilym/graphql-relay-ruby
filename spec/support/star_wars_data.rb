@@ -26,11 +26,11 @@ end
 class Base < ActiveRecord::Base
 end
 
-Base.create(id: 11, name: "Yavin", planet: "Yavin 4", faction_id: 1)
-Base.create(id: 12, name: "Echo Base", planet: "Hoth", faction_id: 1)
-Base.create(id: 13, name: "Death Star", planet: nil, faction_id: 2)
-Base.create(id: 14, name: "Shield Generator", planet: "Endor", faction_id: 2)
-Base.create(id: 15, name: "Headquarters", planet: "Coruscant", faction_id: 2)
+Base.create!(id: 11, name: "Yavin", planet: "Yavin 4", faction_id: 1)
+Base.create!(id: 12, name: "Echo Base", planet: "Hoth", faction_id: 1)
+Base.create!(id: 13, name: "Death Star", planet: nil, faction_id: 2)
+Base.create!(id: 14, name: "Shield Generator", planet: "Endor", faction_id: 2)
+Base.create!(id: 15, name: "Headquarters", planet: "Coruscant", faction_id: 2)
 
 
 rebels  = OpenStruct.new({
@@ -59,7 +59,8 @@ STAR_WARS_DATA = {
     id = (idx + 1).to_s
     memo[id] = OpenStruct.new(name: name, id: id)
     memo
-  end
+  end,
+  "Base" => Hash.new { |h, k| h[k] = Base.find(k) }
 }
 
 def STAR_WARS_DATA.create_ship(name, faction_id)

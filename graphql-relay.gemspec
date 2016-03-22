@@ -17,7 +17,7 @@ Gem::Specification.new do |s|
   s.files = Dir["{lib}/**/*", "MIT-LICENSE", "readme.md"]
   s.test_files = Dir["spec/**/*"]
 
-  s.add_runtime_dependency "graphql", "~> 0.8"
+  s.add_runtime_dependency "graphql", "~> 0.12"
 
   s.add_development_dependency "activerecord"
   s.add_development_dependency "appraisal"
@@ -29,6 +29,6 @@ Gem::Specification.new do |s|
   s.add_development_dependency "minitest", "~> 5"
   s.add_development_dependency "minitest-focus", "~> 1.1"
   s.add_development_dependency "minitest-reporters", "~>1.0"
-  s.add_development_dependency "rake", "~> 10.4"
+  s.add_development_dependency "rake", "~> 11.0"
   s.add_development_dependency "sqlite3"
 end

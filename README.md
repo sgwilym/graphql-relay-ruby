@@ -87,6 +87,32 @@ QueryType = GraphQL::ObjectType.define do
 end
 ```
 
+#### Custom UUID Generation
+
+By default, `graphql-relay` uses `Base64.strict_encode64` to generate opaque global ids. You can modify this behavior by providing two configurations. They work together to encode and decode ids:
+
+```ruby
+NodeIdentification = GraphQL::Relay::GlobalNodeIdentification.define do
+  # ...
+
+  # Return a string for re-fetching this object
+  to_global_id -> (type_name, id) {
+    "#{type_name}/#{id}"
+  }
+
+  # Based on the incoming string, extract the type_name and id
+  from_global_id -> (global_id) {
+    id_parts  = global_id.split("/")
+    type_name = id_parts[0]
+    id        = id_parts[1]
+    # Return *both*:
+    type_name, id
+  }
+end
+```
+
+`graphql-relay` will use those procs for interacting with global ids.
+
 ### Connections
 
 Connections provide pagination and `pageInfo` for `Array`s or `ActiveRecord::Relation`s.
@@ -126,6 +152,14 @@ connection :featured_comments, CommentType.connection_type do
 end
 ```
 
+#### Maximum Page Size
+
+You can limit the number of results with `max_page_size:`:
+
+```ruby
+connection :featured_comments, CommentType.connection_type, max_page_size: 50
+```
+
 #### Connection types
 
 You can customize a connection type with `.define_connection`:
@@ -146,9 +180,9 @@ Now, `PostType.connection_type` will include a `totalCount` field.
 
 Maybe you need to make a connection object yourself (for example, to return a connection type from a mutation). You can create a connection object like this:
 
-```
-items = ...   # your collection objects
-args = {}     # stub out arguments for this connection object
+```ruby
+items = [...]     # your collection objects
+args = {}         # stub out arguments for this connection object
 connection_class = GraphQL::Relay::BaseConnection.connection_for_items(items)
 connection_class.new(items, args)
 ```
@@ -310,9 +344,10 @@ https://medium.com/@gauravtiwari/graphql-and-relay-on-rails-first-relay-powered-
 
 ## Todo
 
-- Add a `max_page_size` config for connections?
-- Refactor some RelationConnection issues:
-  - fix [unbounded count in page info](https://github.com/rmosolgo/graphql-relay-ruby/blob/88b3d94f75a6dd4c8b2604743108db31f66f8dcc/lib/graphql/relay/base_connection.rb#L79-L86), [details](https://github.com/rmosolgo/graphql-relay-ruby/issues/1)
+- Allow custom defined ID scheme
+- Allow custom edge fields (per connection type)
+- `GlobalNodeIdentification.to_global_id` should receive the type name and _object_, not `id`. (Or, maintain the "`type_name, id` in, `type_name, id` out" pattern?)
+- Make GlobalId a property of the schema, not a global
 
 ## More Resources
 

@@ -13,14 +13,24 @@ module GraphQL
         @order ||= (super || DEFAULT_ORDER)
       end
 
+      def has_next_page
+        !!(first && sliced_nodes.limit(first + 1).count > first)
+      end
+
+      # Used by `pageInfo`
+      def has_previous_page
+        !!(last && sliced_nodes.limit(last + 1).count > last)
+      end
+
       private
 
       # apply first / last limit results
       def paged_nodes
         @paged_nodes = begin
           items = sliced_nodes
-          first && items = items.first(first)
-          last && items.count > last && items = items.last(last)
+          limit = [first, last, max_page_size].compact.min
+          first && items = items.first(limit)
+          last && items.count > last && items = items.last(limit)
           items
         end
       end
@@ -71,10 +81,19 @@ module GraphQL
         @table_name ||= object.table.table_name
       end
 
+      # When creating the where constraint, cast the value to correct column data type so
+      # active record can send it in correct format to db
       def create_order_condition(table, column, value, direction_marker)
         table_name = ActiveRecord::Base.connection.quote_table_name(table)
         name = ActiveRecord::Base.connection.quote_column_name(column)
-        ["#{table_name}.#{name} #{direction_marker} ?", value]
+        if ActiveRecord::VERSION::MAJOR == 5
+          casted_value = object.table.able_to_type_cast? ? object.table.type_cast_for_database(column, value) : value
+        elsif ActiveRecord::VERSION::MAJOR == 4 && ActiveRecord::VERSION::MINOR >= 2
+          casted_value = object.table.engine.columns_hash[column].cast_type.type_cast_from_user(value)
+        else
+          casted_value = object.table.engine.columns_hash[column].type_cast(value)
+        end
+        ["#{table_name}.#{name} #{direction_marker} ?", casted_value]
       end
     end
 
