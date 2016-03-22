@@ -6,8 +6,7 @@ module GraphQL
 
       def cursor_from_node(item)
         idx = sliced_nodes.find_index(item)
-        cursor_parts = [(order || "none"), idx]
-        Base64.strict_encode64(cursor_parts.join(CURSOR_SEPARATOR))
+        Base64.strict_encode64(idx.to_s)
       end
 
       private
@@ -27,12 +26,6 @@ module GraphQL
       def sliced_nodes
         @sliced_nodes ||= begin
           items = object
-          if order
-            # Remove possible direction marker:
-            order_name = order.sub(/^-/, '')
-            items = items.sort_by { |item| item.public_send(order_name) }
-            order.start_with?("-") && items = items.reverse
-          end
           after && items = items[(1 + index_from_cursor(after))..-1]
           before && items = items[0..(index_from_cursor(before) - 1)]
           items
@@ -40,8 +33,7 @@ module GraphQL
       end
 
       def index_from_cursor(cursor)
-        decoded = Base64.decode64(cursor)
-        order, index = decoded.split(CURSOR_SEPARATOR)
+        index = Base64.decode64(cursor)
         index.to_i
       end
     end
