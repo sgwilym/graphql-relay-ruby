@@ -3,14 +3,31 @@ module GraphQL
     class RelationConnection < BaseConnection
       DEFAULT_ORDER = "id"
 
-      def cursor_from_node(item)
-        order_value = item.public_send(order_name)
-        cursor_parts = [order, order_value]
-        Base64.strict_encode64(cursor_parts.join(CURSOR_SEPARATOR))
+      def order_values
+        @order_values ||= object.order_values
       end
 
-      def order
-        @order ||= (super || DEFAULT_ORDER)
+      def order_names
+        @order_names ||= begin
+          if order_values.count == 0
+            names = [DEFAULT_ORDER]
+          else
+            names = order_values.map { |order_value|
+              order_value.expr.name
+            }
+          end
+          names
+        end
+      end
+
+      def cursor_from_node(item)
+        item_values = order_names.map { |order_name|
+          item.public_send(order_name)
+        }
+        cursor_parts = [order_names, item_values].map { |part|
+          Marshal.dump(part)
+        }
+        Base64.strict_encode64(cursor_parts.join(CURSOR_SEPARATOR))
       end
 
       def has_next_page
@@ -21,8 +38,6 @@ module GraphQL
       def has_previous_page
         !!(last && sliced_nodes.limit(last + 1).count > last)
       end
-
-      private
 
       # apply first / last limit results
       def paged_nodes
@@ -35,50 +50,71 @@ module GraphQL
         end
       end
 
-      # Apply cursors to edges
       def sliced_nodes
         @sliced_nodes ||= begin
           items = object
 
-          if order
-            items = items.order(items.table[order_name].public_send(order_direction))
-          end
-
           if after
-            _o, order_value = slice_from_cursor(after)
-            direction_marker = order_direction == :asc ? ">" : "<"
-            where_condition = create_order_condition(table_name, order_name, order_value, direction_marker)
-            items = items.where(where_condition)
+            item_values = hash_from_cursor(after)
+            where_conditions = create_order_conditions(item_values, :after)
+            items = items.where(where_conditions)
           end
 
           if before
-            _o, order_value = slice_from_cursor(before)
-            direction_marker = order_direction == :asc ? "<" : ">"
-            where_condition = create_order_condition(table_name, order_name, order_value, direction_marker)
-            items = items.where(where_condition)
+            item_values = hash_from_cursor(before)
+            where_conditions = create_order_conditions(item_values, :before)
+            items = items.where(where_conditions)
           end
 
           items
         end
       end
 
+      def hash_from_cursor(cursor)
+        orders, item_values = slice_from_cursor(cursor)
+        Hash[orders.zip(item_values)]
+      end
+
       def slice_from_cursor(cursor)
         decoded = Base64.decode64(cursor)
-        order, order_value = decoded.split(CURSOR_SEPARATOR)
-      end
-
-      # Remove possible direction marker:
-      def order_name
-        @order_name ||= order.sub(/^-/, '')
-      end
-
-      # Check for direction marker
-      def order_direction
-        @order_direction ||= order.start_with?("-") ? :desc : :asc
+        orders, item_values = decoded.split(CURSOR_SEPARATOR).map { |dump|
+          Marshal.load(dump)
+        }
       end
 
       def table_name
         @table_name ||= object.table.table_name
+      end
+
+      def create_direction_marker(order_name, argument)
+        if order_values.count > 0
+          direction = order_values.select { |order_value|
+            order_value.expr.name == order_name
+          }.first.direction
+        else
+          direction = :asc
+        end
+
+        if argument == :after
+          marker = direction == :asc ? ">" : "<"
+        elsif argument == :before
+          marker = direction == :asc ? "<" : ">"
+        end
+      end
+
+      def create_order_conditions(item_values, argument)
+        where_conditions = item_values.map { |order_name, item_value|
+          direction_marker = create_direction_marker(order_name, argument)
+          condition = create_order_condition(table_name, order_name, item_value, direction_marker)
+          condition
+        }
+        query = where_conditions.map { |condition|
+          condition[0]
+        }.join(' AND ')
+        arguments = where_conditions.map { |condition|
+          condition[1]
+        }
+        [query, arguments].flatten
       end
 
       # When creating the where constraint, cast the value to correct column data type so
@@ -95,11 +131,10 @@ module GraphQL
         end
         ["#{table_name}.#{name} #{direction_marker} ?", casted_value]
       end
-    end
 
-
-    if defined?(ActiveRecord)
-      BaseConnection.register_connection_implementation(ActiveRecord::Relation, RelationConnection)
+      if defined?(ActiveRecord)
+        BaseConnection.register_connection_implementation(ActiveRecord::Relation, RelationConnection)
+      end
     end
   end
 end
