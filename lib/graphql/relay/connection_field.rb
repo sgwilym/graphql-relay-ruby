@@ -12,7 +12,6 @@ module GraphQL
           [:after, GraphQL::STRING_TYPE],
           [:last, GraphQL::INT_TYPE],
           [:before, GraphQL::STRING_TYPE],
-          [:order, GraphQL::STRING_TYPE],
         ]
 
       DEFAULT_ARGUMENTS = ARGUMENT_DEFINITIONS.reduce({}) do |memo, arg_defn|
